@@ -1,10 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart-context";
-import { createCheckout, getOrderStatus } from "@/lib/orders";
-import type { PaymentMethod, OrderStatus } from "@/lib/types";
+import { createOrder, createCheckout, getOrderStatus } from "@/lib/orders";
+import type { PaymentMethod, OrderStatus, CheckoutResponse } from "@/lib/types";
 import {
   ExternalLink,
   CheckCircle,
@@ -12,6 +12,8 @@ import {
   Clock,
   Package,
   Info,
+  Landmark,
+  Wallet,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -47,39 +49,77 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, total, clearCart } = useCart();
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("fiat_to_fiat");
-  const [velafiOrderId, setVelafiOrderId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("mono");
+  const [orderId, setOrderId] = useState<number | null>(null);
+  const [checkoutData, setCheckoutData] = useState<CheckoutResponse | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
 
-  /* ---- Create checkout (POST) ---- */
-  const checkout = useMutation({
-    mutationFn: () => createCheckout(items, paymentMethod),
-    onSuccess(data) {
-      setVelafiOrderId(data.velafi_order_id);
-    },
-  });
+  /* ---- Restore session after bank redirect ---- */
+  useEffect(() => {
+    const pending = sessionStorage.getItem("md_pending_order");
+    if (pending) {
+      sessionStorage.removeItem("md_pending_order");
+      const id = Number(pending);
+      if (!Number.isNaN(id) && id > 0) {
+        setOrderId(id);
+      }
+    }
+  }, []);
+
+  /* ---- Create order + checkout (sequential) ---- */
+  const [creating, setCreating] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  async function handleCheckout() {
+    setCheckoutError(null);
+    setCreating(true);
+    try {
+      // 1. Create the order from cart items
+      const order = await createOrder(items);
+      setOrderId(order.id);
+
+      // 2. Initiate payment checkout
+      const resp = await createCheckout(order.id, paymentMethod);
+      setCheckoutData(resp);
+
+      // 3. Handle method-specific response
+      if (resp.method === "mono" && resp.redirectUrl) {
+        sessionStorage.setItem("md_pending_order", String(order.id));
+        setRedirecting(true);
+        window.location.href = resp.redirectUrl;
+        return; // browser navigates away
+      }
+      // stablecoin — stay on page to show payment link
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : "Error al procesar el pago");
+    } finally {
+      setCreating(false);
+    }
+  }
 
   /* ---- Poll order status ---- */
   const statusQuery = useQuery({
-    queryKey: ["order-status", velafiOrderId],
-    queryFn: () => getOrderStatus(velafiOrderId!),
-    enabled: !!velafiOrderId,
+    queryKey: ["order-status", orderId],
+    queryFn: () => getOrderStatus(orderId!),
+    enabled: !!orderId,
     refetchInterval(query) {
       const st = query.state.data?.status;
-      if (!st || !TERMINAL.has(st)) return 3000; // poll every 3s
-      return false; // stop polling on terminal state
+      if (!st || !TERMINAL.has(st)) return 3000;
+      return false;
     },
   });
 
   const currentStatus = statusQuery.data?.status;
-  const paymentLink = checkout.data?.payment_link ?? statusQuery.data?.payment_link;
+  const paymentLink =
+    checkoutData?.method === "stablecoin" ? checkoutData.paymentLink : undefined;
   const isTerminal = currentStatus ? TERMINAL.has(currentStatus) : false;
 
   const activeIdx = currentStatus ? STEP_ORDER.indexOf(currentStatus) : -1;
   const isError =
-    checkout.isError || currentStatus === "pay_fail" || currentStatus === "cancelled";
+    !!checkoutError || currentStatus === "pay_fail" || currentStatus === "cancelled";
 
   /* ---- Empty cart (before any checkout) ---- */
-  if (items.length === 0 && !velafiOrderId) {
+  if (items.length === 0 && !orderId) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-10">
         <h1 className="text-3xl font-bold text-brand">Pago</h1>
@@ -94,8 +134,8 @@ export default function CheckoutPage() {
     );
   }
 
-  /* ---- Empty cart (after a successful checkout that cleared it) ---- */
-  if (items.length === 0 && velafiOrderId && checkout.isSuccess) {
+  /* ---- Empty cart (after a successful checkout) ---- */
+  if (items.length === 0 && orderId && currentStatus) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-10">
         <h1 className="text-3xl font-bold text-brand">Pago</h1>
@@ -109,7 +149,7 @@ export default function CheckoutPage() {
     <main className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="text-3xl font-bold text-brand">Pago</h1>
 
-      {!velafiOrderId ? renderForm() : renderPaymentFlow()}
+      {!orderId || (!currentStatus && !redirecting) ? renderForm() : renderPaymentFlow()}
     </main>
   );
 
@@ -143,33 +183,45 @@ export default function CheckoutPage() {
           </div>
         </section>
 
-        {/* Payment method toggle */}
+        {/* Payment method selector */}
         <section className="mt-4">
           <p className="text-sm font-medium text-neutral-600">
             Método de pago
           </p>
           <div className="mt-2 flex gap-3">
             <button
-              onClick={() => setPaymentMethod("fiat_to_fiat")}
-              className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
-                paymentMethod === "fiat_to_fiat"
+              onClick={() => setPaymentMethod("mono")}
+              className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                paymentMethod === "mono"
                   ? "border-brand bg-brand/10 text-brand"
                   : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-400"
               }`}
             >
-              Pesos (COP)
+              <Landmark className="h-4 w-4" />
+              Pagar con PSE (Mono)
             </button>
             <button
               onClick={() => setPaymentMethod("stablecoin")}
-              className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
                 paymentMethod === "stablecoin"
                   ? "border-brand bg-brand/10 text-brand"
                   : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-400"
               }`}
             >
+              <Wallet className="h-4 w-4" />
               Stablecoin (USDC)
             </button>
           </div>
+          {paymentMethod === "mono" && (
+            <p className="mt-2 text-xs text-neutral-500">
+              Serás redirigido a tu banco para completar el pago a través de PSE.
+            </p>
+          )}
+          {paymentMethod === "stablecoin" && (
+            <p className="mt-2 text-xs text-neutral-500">
+              Paga con USDC u otras criptomonedas a través de VelaFi.
+            </p>
+          )}
         </section>
 
         {/* TD-2 info note */}
@@ -181,18 +233,18 @@ export default function CheckoutPage() {
           </span>
         </div>
 
-        {/* Confirm */}
+        {/* Confirm button */}
         <button
-          onClick={() => checkout.mutate()}
-          disabled={checkout.isPending}
+          onClick={handleCheckout}
+          disabled={creating}
           className="mt-4 w-full rounded-lg bg-brand px-6 py-3 font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
         >
-          {checkout.isPending ? "Procesando pago..." : "Confirmar pago"}
+          {creating ? "Procesando pago..." : "Confirmar pago"}
         </button>
 
-        {checkout.isError && (
+        {checkoutError && (
           <p className="mt-3 text-sm text-red-600">
-            Error al iniciar el pago: {checkout.error.message}
+            Error al iniciar el pago: {checkoutError}
           </p>
         )}
       </>
@@ -200,13 +252,27 @@ export default function CheckoutPage() {
   }
 
   /* ---------------------------------------------------------------- */
-  /*  Step 2 — Payment link + status stepper                          */
+  /*  Step 2 — Payment flow (redirecting / payment link / stepper)    */
   /* ---------------------------------------------------------------- */
   function renderPaymentFlow() {
     return (
       <div className="mt-6 space-y-6">
-        {/* Payment link — shown while still paying */}
-        {currentStatus === "paying" && paymentLink && (
+        {/* Redirecting to bank (mono) */}
+        {redirecting && (
+          <div className="rounded-lg border border-brand bg-brand/5 p-4 text-center">
+            <Landmark className="mx-auto h-8 w-8 text-brand" />
+            <p className="mt-3 text-sm font-medium text-brand">
+              Redirigiendo a tu banco...
+            </p>
+            <p className="mt-1 text-xs text-neutral-500">
+              Serás redirigido a PSE para autenticarte. Vuelve a esta página
+              después de completar el pago.
+            </p>
+          </div>
+        )}
+
+        {/* Payment link — shown for stablecoin while still paying */}
+        {!redirecting && currentStatus === "paying" && paymentLink && (
           <div className="rounded-lg border border-brand bg-brand/5 p-4">
             <p className="text-sm font-medium text-brand">
               Abre el siguiente enlace para completar el pago:
@@ -296,8 +362,9 @@ export default function CheckoutPage() {
             </p>
             <button
               onClick={() => {
-                setVelafiOrderId(null);
-                checkout.reset();
+                setOrderId(null);
+                setCheckoutData(null);
+                setRedirecting(false);
               }}
               className="mt-2 font-medium text-red-700 underline"
             >
@@ -341,14 +408,14 @@ export default function CheckoutPage() {
         )}
 
         {/* Polling indicator */}
-        {!isTerminal && !checkout.isPending && (
+        {!isTerminal && !creating && !redirecting && (
           <p className="animate-pulse text-center text-xs text-neutral-400">
             Actualizando estado...
           </p>
         )}
 
         {/* Loading spinner for initial status fetch */}
-        {statusQuery.isLoading && (
+        {statusQuery.isLoading && !redirecting && (
           <p className="text-center text-sm text-neutral-500">
             Consultando estado del pago...
           </p>
