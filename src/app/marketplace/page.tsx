@@ -1,18 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { getProducts } from "@/lib/api";
+import type { Product } from "@/lib/types";
 import Link from "next/link";
-
-interface Product {
-  id: number;
-  name: string;
-  category: string;
-  price_per_kg: number;
-  unit: string;
-  department: string;
-  quantity_available: number;
-}
 
 export default function MarketplacePage() {
   const [q, setQ] = useState("");
@@ -21,10 +12,7 @@ export default function MarketplacePage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["products", q, category, department],
-    queryFn: () =>
-      apiFetch<Product[]>(
-        `/products?q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}&department=${encodeURIComponent(department)}`
-      ),
+    queryFn: () => getProducts({ q, category, department }),
   });
 
   return (

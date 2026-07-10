@@ -1,17 +1,15 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
-import { apiFetch } from "@/lib/api";
+import { getProduct } from "@/lib/api";
+import type { Product } from "@/lib/types";
 
 export default function ProductDetail() {
   const params = useParams();
   const id = params.id as string;
   const { data, isLoading } = useQuery({
     queryKey: ["product", id],
-    queryFn: () => apiFetch<{
-      id: number; name: string; category: string; price_per_kg: number;
-      unit: string; department: string; quantity_available: number;
-    }>(`/products/${id}`),
+    queryFn: () => getProduct(id),
   });
 
   if (isLoading) return <p className="p-10">Cargando...</p>;
