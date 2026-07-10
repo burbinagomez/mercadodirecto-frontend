@@ -8,7 +8,7 @@ export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"farmer" | "consumer">("consumer");
+  const [role, setRole] = useState<"farmer" | "consumer" | "restaurant">("consumer");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -38,9 +38,10 @@ export default function SignupPage() {
         <input className="w-full rounded border p-2" placeholder="Contraseña" value={password}
           onChange={(e) => setPassword(e.target.value)} type="password" required />
         <select className="w-full rounded border p-2" value={role}
-          onChange={(e) => setRole(e.target.value as "farmer" | "consumer")}>
+          onChange={(e) => setRole(e.target.value as "farmer" | "consumer" | "restaurant")}>
           <option value="consumer">Soy consumidor</option>
           <option value="farmer">Soy agricultor</option>
+          <option value="restaurant">Soy restaurante</option>
         </select>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button disabled={loading}

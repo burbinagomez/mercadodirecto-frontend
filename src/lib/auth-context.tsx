@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
-type Role = "farmer" | "consumer" | null;
+type Role = "farmer" | "consumer" | "restaurant" | null;
 
 interface AuthState {
   role: Role;
