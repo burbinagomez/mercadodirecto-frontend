@@ -1,4 +1,5 @@
 "use client";
+import type { CheckoutRequest, PaymentCheckoutBody } from "@/lib/types";
 export default function CheckoutPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">

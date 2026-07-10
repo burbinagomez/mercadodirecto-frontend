@@ -1,14 +1,15 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { signup } from "@/lib/api";
+import type { SignupInput, UserRole } from "@/lib/types";
 import Link from "next/link";
 
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"farmer" | "consumer" | "restaurant">("consumer");
+  const [role, setRole] = useState<UserRole>("consumer");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -17,10 +18,8 @@ export default function SignupPage() {
     setLoading(true);
     setError("");
     try {
-      await apiFetch("/auth/signup", {
-        method: "POST",
-        body: JSON.stringify({ email, password, role }),
-      });
+      const input: SignupInput = { email, password, role };
+      await signup(input);
       router.push("/login");
     } catch (e) {
       setError((e as Error).message);
@@ -38,7 +37,7 @@ export default function SignupPage() {
         <input className="w-full rounded border p-2" placeholder="Contraseña" value={password}
           onChange={(e) => setPassword(e.target.value)} type="password" required />
         <select className="w-full rounded border p-2" value={role}
-          onChange={(e) => setRole(e.target.value as "farmer" | "consumer" | "restaurant")}>
+          onChange={(e) => setRole(e.target.value as UserRole)}>
           <option value="consumer">Soy consumidor</option>
           <option value="farmer">Soy agricultor</option>
           <option value="restaurant">Soy restaurante</option>

@@ -1,8 +1,9 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { login } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import type { LoginInput } from "@/lib/types";
 import Link from "next/link";
 
 export default function LoginPage() {
@@ -18,10 +19,8 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      await apiFetch("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
+      const input: LoginInput = { email, password };
+      await login(input);
       await refresh();
       router.push("/marketplace");
     } catch (e) {

@@ -1,8 +1,9 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { getMe } from "@/lib/api";
+import type { User, UserRole } from "@/lib/types";
 
-type Role = "farmer" | "consumer" | "restaurant" | null;
+type Role = UserRole | null;
 
 interface AuthState {
   role: Role;
@@ -25,8 +26,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function refresh() {
     try {
-      const me = await apiFetch<{ id: number; email: string; role: string }>("/auth/me");
-      setRole(me.role as Role);
+      const me: User = await getMe();
+      setRole(me.role);
       setEmail(me.email);
     } catch {
       setRole(null);

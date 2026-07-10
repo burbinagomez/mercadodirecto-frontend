@@ -1,4 +1,5 @@
 "use client";
+import type { Order, OrderItem } from "@/lib/types";
 export default function OrdersPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
