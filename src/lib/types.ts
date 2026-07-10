@@ -106,39 +106,47 @@ export interface Order {
 
 // ─── Payments ──────────────────────────────────────────────────────────────
 
-export type PaymentMethod = "fiat_to_fiat" | "stablecoin";
+export type PaymentMethod = "mono" | "stablecoin";
 export type PaymentStatus = "created" | "paid" | "failed" | "refunded";
 
 /** POST /payments/checkout body. */
 export interface PaymentCheckoutBody {
   order_id: number;
   method?: PaymentMethod;
-  /* fiat_to_fiat fields */
-  on_ramp_country?: string;
-  on_ramp_fiat?: string;
-  off_ramp_country?: string;
-  off_ramp_fiat?: string;
-  on_ramp_payment_id?: number | null;
-  off_ramp_payment_id?: number | null;
-  /* stablecoin fields */
+  /* stablecoin (VelaFi) fields */
   wallet_id?: number | null;
   currency?: string;
 }
 
-/** Successful response for fiat_to_fiat checkout. */
-export interface PaymentFiatResponse {
-  method: "fiat_to_fiat";
-  velafiOrderId: string;
-  reference: string;
-}
-
-/** Successful response for stablecoin checkout. */
+/** Successful response for stablecoin (VelaFi) checkout. */
 export interface PaymentStablecoinResponse {
   method: "stablecoin";
   paymentLink: string;
   reference: string;
 }
 
+/** Successful response for Mono (PSE) checkout. */
+export interface PaymentMonoResponse {
+  method: "mono";
+  redirectUrl: string;
+  reference: string;
+}
+
 export type PaymentCheckoutResponse =
-  | PaymentFiatResponse
+  | PaymentMonoResponse
   | PaymentStablecoinResponse;
+
+/** Order status used for checkout polling until PAID. */
+export type OrderStatus =
+  | "paying"
+  | "paid"
+  | "scheduled"
+  | "collected"
+  | "delivered"
+  | "pay_fail"
+  | "cancelled";
+
+export interface OrderStatusResponse {
+  status: OrderStatus;
+  payment_link?: string;
+}
